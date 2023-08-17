@@ -9,9 +9,14 @@ card_path = "blackjack\\playing_cards\\cards_scaled.png"
 card_back_path = "blackjack\\playing_cards\\card_back_scaled.png"
 card_spritesheet = pygame.image.load(os.path.join(os.path.dirname(__file__), card_path))
 card_back_img = pygame.image.load(os.path.join(os.path.dirname(__file__), card_back_path))
+
 screen_width = 640
 screen_height = 480
 screen = pygame.display.set_mode([screen_width, screen_height])
+
+hit_button_path = "blackjack\\buttons\\hit_button.png"
+stick_button_path = "blackjack\\buttons\\stick_button.png"
+
 card_w = 64
 card_h = 89
 times_to_shuffle = 100
@@ -22,6 +27,39 @@ class GameState(Enum):
     GS_DEALER_TURN = 2
     GS_END_ROUND = 3
     GS_GAME_OVER = 4
+
+class Button:
+    def __init__(self, position, sprite, func):
+        self.pos = position
+        self.image = sprite
+        self.callback = func
+        self.active = False
+    def render(self):
+        global screen
+        screen.blit(self.image, self.pos)
+
+hit_button_height = 32
+hit_button_width = 128
+stick_button_height = 32
+stick_button_width = 128
+button_spacing = 4
+hit_button_pos = (((screen_width / 4) * 3), (screen_height / 2) - (hit_button_height + (button_spacing / 2)))
+stick_button_pos = (((screen_width / 4) * 3), (screen_height / 2) + (button_spacing / 2))
+
+hit_button_path = "blackjack\\buttons\\hit_button_s.png"
+stick_button_path = "blackjack\\buttons\\stick_button_s.png"
+
+hit_button_img = pygame.image.load(os.path.join(os.path.dirname(__file__), hit_button_path))
+stick_button_img = pygame.image.load(os.path.join(os.path.dirname(__file__), stick_button_path))
+
+def hit_clicked():
+    pass
+
+def stick_clicked():
+    pass
+
+hit_button = Button(hit_button_pos, hit_button_img, hit_clicked)
+stick_button = Button(stick_button_pos, stick_button_img, stick_clicked)
 
 starting_money = 100
 
@@ -72,13 +110,20 @@ def deal_card(hand):
     hand.append(deck.pop())
     return
 
+def betting_buttons_active(state):
+    hit_button.active = state
+    stick_button.active = state
+
 def update_game():
     global game_state
+    global dealer_hand
+    global player
     match game_state:
         case GameState.GS_INIT:
             player.money = starting_money
             player.hand = []
             player.current_bet = 0
+            dealer_hand = []
             #intro
             shuffle_deck()
             #deal cards
@@ -89,6 +134,7 @@ def update_game():
             game_state = GameState.GS_PLAYER_TURN
             return
         case GameState.GS_PLAYER_TURN:
+            betting_buttons_active(True)
             return
         case GameState.GS_DEALER_TURN:
             pass
@@ -107,9 +153,36 @@ def render_card(index, dest):
     else:
         screen.blit(pygame.transform.scale(card_placer, (card_w, card_h)), dest, (0, 0, card_w, card_h))
 
+def render_cards():
+    global player
+    global dealer_hand
+    i = 0
+    for card_p in player.hand:
+        render_card(card_p, player_card_positions[i])
+        i += 1
+    i = 0
+    if game_state == GameState.GS_DEALER_TURN:
+        for card_d in dealer_hand:
+            render_card(card_d, dealer_card_positions[i])
+            i += 1
+    else:
+        render_card(dealer_hand[0], dealer_card_positions[0])
+        render_card(-1, dealer_card_positions[1])
+
+def render():
+    global screen
+    screen.fill((200, 200, 200))
+    render_cards()
+    if game_state == GameState.GS_PLAYER_TURN:
+        hit_button.render()
+        stick_button.render()
+    
+    pygame.display.flip()
+
 def main():
     random.seed(time.time())
     running = True
+    global game_state
     while(running):
         #input
         for event in pygame.event.get():
@@ -118,26 +191,12 @@ def main():
             elif event.type == pygame.KEYDOWN:
                 pass
                 if event.key == pygame.K_SPACE:
-                    shuffle_deck()
+                    game_state = GameState.GS_INIT
         #update
         update_game()
 
         #render
-        #if game_state == GameState.GS_PLAYER_TURN:
-        screen.fill((200, 200, 200))
-        i = 0
-        for card_i in player.hand:
-            render_card(deck[card_i], player_card_positions[i])
-            i += 1
-        i = 0
-        if game_state == GameState.GS_DEALER_TURN:
-            for card_i in dealer_hand:
-                render_card(deck[card_i], dealer_card_positions[i])
-                i += 1
-        else:
-            render_card(deck[dealer_hand[0]], dealer_card_positions[0])
-            render_card(-1, dealer_card_positions[1])
-        pygame.display.flip()
+        render()
     
     pygame.quit()
     return
