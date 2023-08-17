@@ -93,14 +93,29 @@ This probably wont scale well, as image sizes will not grow and shrink with the 
 hit_button_pos = (((screen_width / 4) * 3), (screen_height / 2) - (button_height + (button_spacing / 2)))
 stick_button_pos = (((screen_width / 4) * 3), (screen_height / 2) + (button_spacing / 2))
 
+deck = []
+def deal_card():
+    global deck     #   grab that deck
+    if len(deck) > 0:   #   make sure we have a card left
+        return deck.pop()   #   take one off deck and return it
+    else:
+        pass    #   handle soon
+
 def hit_clicked():
+    global player
     print("Hit clicked")
     player.p_hand.add_card(deal_card())
     if(player.p_hand.value == 0):
-        pass    #   Bust
+        print("Bust")
+        change_state(GameState.GS_INIT)
     elif player.p_hand.value == 21: #   21, no need to hit, move to dealers turn
+        print("21")
         change_state(GameState.GS_DEALER_TURN)
     else:
+        print("Hand: " + str(player.p_hand.value))
+        if(len(player.p_hand.cards) == 5):
+            print("5 card trick!")
+            change_state(GameState.GS_INIT)
         pass    #   below 21, can still hit
 
 def stick_clicked():
@@ -160,7 +175,7 @@ class Hand():
             if aces > 0:    #   as long as we have one
                 hand_val += 10
                 if hand_val == 21:  #   bang on 21
-                    if len(this.cards) == 2:  #   only 2 cards, blackjack!!
+                    if len(self.cards) == 2:  #   only 2 cards, blackjack!!
                         return -1
         return hand_val
         # return_vals   0 - bust, -1 - blackjack, N - hand_value (2 - 21)
@@ -175,7 +190,6 @@ class Player():
         self.p_hand = Hand()
 
 player = Player()   # This player has money, a current_bet and a hand
-deck = []
 dealer_hand = Hand()
 change_state(GameState.GS_INIT)
 
@@ -188,13 +202,6 @@ def shuffle_deck():
     for i in range(times_to_shuffle):
         random.shuffle(deck)    #   shuffle that badboy
     return
-
-def deal_card():
-    global deck     #   grab that deck
-    if len(deck) > 0:   #   make sure we have a card left
-        return deck.pop()   #   take one off deck and return it
-    else:
-        pass    #   handle soon
 
 def betting_buttons_active(state):
     hit_button.active = state
@@ -225,13 +232,11 @@ def update_game():
             shuffle_deck()
 
             player.p_hand.add_card(deal_card())
-            player.p_hand.print_cards()
             player.p_hand.add_card(deal_card())
-            player.p_hand.print_cards()
+            print("Hand: " + str(player.p_hand.value))
             dealer_hand.add_card(deal_card())
-            player.p_hand.print_cards()
             dealer_hand.add_card(deal_card())
-            player.p_hand.print_cards()
+            print("Dealer Hand: " + str(dealer_hand.cards[0]))
             #   check the first hands for blackjack/s
             if(player.p_hand.value == -1):
                 if(dealer_hand.value == -1):
