@@ -12,6 +12,15 @@ pygame.init()
 font = pygame.font.SysFont('arial', 15)
 text = ""
 text_texture = font.render(text, True, (0,0,0))
+money_text_texture = font.render("Money: 100", True, (0,0,0))
+bet_text_texture = font.render("Bet: 10", True, (0,0,0))
+
+def update_money_text():
+    global money_text_texture
+    global bet_text_texture
+    money_text_texture = font.render("Money: " + str(player.money), True, (0,0,0))
+    bet_text_texture = font.render("Bet: " + str(player.current_bet), True, (0,0,0))
+
 
 def cPrint(in_text):
     global text
@@ -40,6 +49,13 @@ card_spritesheet = pygame.image.load(loadable_card_path)
 card_back_img = pygame.image.load(os.path.join(os.path.dirname(__file__), "blackjack\\playing_cards\\card_back_scaled.png"))
 hit_button_img = pygame.image.load(os.path.join(os.path.dirname(__file__), "blackjack\\buttons\\hit_button_s.png"))
 stick_button_img = pygame.image.load(os.path.join(os.path.dirname(__file__), "blackjack\\buttons\\stick_button_s.png"))
+bet_plus_img = pygame.image.load(os.path.join(os.path.dirname(__file__), "blackjack\\buttons\\bet_plus.png"))
+bet_minus_img = pygame.image.load(os.path.join(os.path.dirname(__file__), "blackjack\\buttons\\bet_minus.png"))
+next_round_img = pygame.image.load(os.path.join(os.path.dirname(__file__), "blackjack\\buttons\\next_round.png"))
+restart_img = pygame.image.load(os.path.join(os.path.dirname(__file__), "blackjack\\buttons\\restart.png"))
+cashout_img = pygame.image.load(os.path.join(os.path.dirname(__file__), "blackjack\\buttons\\cashout.png"))
+continue_img = pygame.image.load(os.path.join(os.path.dirname(__file__), "blackjack\\buttons\\continue.png"))
+quit_img = pygame.image.load(os.path.join(os.path.dirname(__file__), "blackjack\\buttons\\quit.png"))
 
 screen_width = 640
 screen_height = 480
@@ -56,10 +72,12 @@ card_placer = pygame.Surface((card_w, card_h))
 
 class GameState(Enum):  #   A list of states the game can be in. A general view of whats happening
     GS_INIT = 0
-    GS_PLAYER_TURN = 1
-    GS_DEALER_TURN = 2
-    GS_END_ROUND = 3
-    GS_GAME_OVER = 4
+    GS_BET = 1
+    GS_PLAYER_TURN = 2
+    GS_DEALER_TURN = 3
+    GS_END_ROUND = 4
+    GS_GAME_OVER = 5
+    GS_QUIT = 6
 
 state_updated = False
 def change_state(new_state):
@@ -75,9 +93,13 @@ class Button:
         self.image = sprite
         self.callback = func
         self.active = False
+        return
+    
     def render(self):
         global screen
         screen.blit(self.image, self.pos)
+        return
+    
     def click_check(self):
         """
         checking the position of the mouse
@@ -85,18 +107,20 @@ class Button:
         against the x (self.pos[0]) and y (self.pos[1]) coordinates of this button
         the button starts at self.pos[0]  and ends at (self.pos[0] + button_width), similarly for height
         """
-        pos = pygame.mouse.get_pos()
-        if (pos[0] > self.pos[0] and    #check mouse is further than the start of this button
-            pos[0] < (self.pos[0] + button_width) and   #and check is is not further than the end
-            pos[1] > self.pos[1] and
-            (pos[1] < (self.pos[1] + button_height))):
+        if self.active:
+            pos = pygame.mouse.get_pos()
+            if (pos[0] > self.pos[0] and    #check mouse is further than the start of this button
+                pos[0] < (self.pos[0] + button_width) and   #and check is is not further than the end
+                pos[1] > self.pos[1] and
+                (pos[1] < (self.pos[1] + button_height))):
 
-            """
-            self.callback() is set as hit_clicked when creating the hit_button.
-            this allows us to call a function (hit_clicked())
-            """
-            cPrintClear()
-            self.callback() #callback = hit_clicked   so   callback() = hit_clicked()
+                """
+                self.callback() is set as hit_clicked when creating the hit_button.
+                this allows us to call a function (hit_clicked())
+                """
+                cPrintClear()
+                self.callback() #callback = hit_clicked   so   callback() = hit_clicked()
+        return
 
 button_height = 32
 button_width = 128
@@ -106,8 +130,20 @@ button_spacing = 4
 Positioning relative to the screen.
 This probably wont scale well, as image sizes will not grow and shrink with the screen size
 """
-hit_button_pos = (((screen_width / 4) * 3), (screen_height / 2) - (button_height + (button_spacing / 2)))
-stick_button_pos = (((screen_width / 4) * 3), (screen_height / 2) + (button_spacing / 2))
+current_btn_txt_offset = (((screen_width / 4) * 3), (screen_height / 2) - bet_text_texture.get_height() - money_text_texture.get_height() - (button_height + ((7 * button_spacing) / 2)))
+
+money_text_pos = current_btn_txt_offset
+
+bet_text_pos = (current_btn_txt_offset[0], current_btn_txt_offset[1] + button_spacing + bet_text_texture.get_height())
+current_btn_txt_offset = bet_text_pos
+
+hit_button_pos = (current_btn_txt_offset[0], current_btn_txt_offset[1] + button_spacing + button_height)
+current_btn_txt_offset = hit_button_pos
+
+stick_button_pos = (current_btn_txt_offset[0], current_btn_txt_offset[1] + button_spacing + button_height)
+current_btn_txt_offset = stick_button_pos
+
+next_round_button_pos = (current_btn_txt_offset[0], current_btn_txt_offset[1] + button_spacing + button_height)
 
 deck = []
 def deal_card():
@@ -117,31 +153,109 @@ def deal_card():
     else:
         pass    #   handle soon
 
-def hit_clicked():
+def hit_clicked(dealer = False):
+    global bet_increment
     global player
-    cPrint("Hit clicked")
-    player.p_hand.add_card(deal_card())
-    if(player.p_hand.value == 0):
-        cPrint("Bust")
-        change_state(GameState.GS_INIT)
-    elif player.p_hand.value == 21: #   21, no need to hit, move to dealers turn
-        cPrint("21")
-        change_state(GameState.GS_DEALER_TURN)
+    if not dealer:
+        cPrint("Hit clicked")
+        hand = player.hand
     else:
-        cPrint("Hand: " + str(player.p_hand.value))
-        if(len(player.p_hand.cards) == 5):
+        cPrint("Dealer Hit")
+        hand = dealer_hand
+    hand.add_card(deal_card())
+
+    if(hand.value == 0):
+        if not dealer:
+            cPrint("Bust")
+            player.current_bet = bet_increment
+            update_money_text()
+        else:
+            cPrint("Dealer Bust")
+            player.money += player.current_bet * 2
+            update_money_text()
+        change_state(GameState.GS_END_ROUND)
+    elif hand.value == 21: #   21, no need to hit, move to dealers turn
+        if not dealer:
+            cPrint("21")
+            dealer_timer = dealer_delay
+            change_state(GameState.GS_DEALER_TURN)
+        else:
+            cPrint("Dealer 21")
+            if player.hand.value < 21:
+                player.current_bet = bet_increment
+            elif player.hand.value == 21:
+                cPrint("Push")
+                player.money += player.current_bet
+                update_money_text()
+            change_state(GameState.GS_END_ROUND)
+    else:   #   below 21, can still hit
+        if not dealer:
+            cPrint("Hand: " + str(player.hand.value))
+        if(len(hand.cards) == 5) and not dealer:    #   5 card trick
             cPrint("5 card trick!")
-            change_state(GameState.GS_INIT)
-        pass    #   below 21, can still hit
+            player.money += player.current_bet * 2
+            change_state(GameState.GS_END_ROUND)
+    return
 
 def stick_clicked():
-    cPrint("Stick clicked")
+    cPrint("Stick on " + str(player.hand.value))
     change_state(GameState.GS_DEALER_TURN)
+    return
+
+def bet_plus_clicked():
+    global player
+    if (player.current_bet + bet_increment) <= player.money:
+        cPrint("Bet + " + str(bet_increment))
+        player.current_bet += bet_increment
+    else:
+        cPrint("Not enough money to increase bet by " + str(bet_increment))
+    update_money_text()
+    return
+
+def bet_minus_clicked():
+    global player
+    if player.current_bet > bet_increment:
+        cPrint("Bet - " + str(bet_increment))
+        player.current_bet -= bet_increment
+    else:
+        cPrint("Bet cannot be below " + str(bet_increment))
+    update_money_text()
+    return
+
+def next_round_clicked():
+    cPrint("Next Round")
+    player.money -= player.current_bet
+    update_money_text()
+    change_state(GameState.GS_PLAYER_TURN)
+    return
+
+def continue_clicked():
+    pass
+
+def restart_clicked():
+    pass
+
+def cashout_clicked():
+    pass
+
+def quit_clicked():
+    pass
 
 hit_button = Button(hit_button_pos, hit_button_img, hit_clicked)
 stick_button = Button(stick_button_pos, stick_button_img, stick_clicked)
 
+bet_plus_button = Button(hit_button_pos, bet_plus_img, bet_plus_clicked)
+bet_minus_button = Button(stick_button_pos, bet_minus_img, bet_minus_clicked)
+next_round_button = Button(next_round_button_pos, next_round_img, next_round_clicked)
+
+continue_button = Button(hit_button_pos, continue_img, continue_clicked)
+cashout_button = Button(stick_button_pos, cashout_img, cashout_clicked)
+
+restart_button = Button(hit_button_pos, restart_img, restart_clicked)
+quit_button = Button(stick_button_pos, quit_img, quit_clicked)
+
 starting_money = 100
+bet_increment = 10
 
 """
 The offset is where we will start drawin the player and dealer hands
@@ -197,16 +311,16 @@ class Hand():
         # return_vals   0 - bust, -1 - blackjack, N - hand_value (2 - 21)
 
 class Player():
-    money = starting_money
-    current_bet = 0
-    p_hand = Hand()
-    def reset(self):
+    def __init__(self):
         self.money = starting_money
-        self.current_bet = 0
-        self.p_hand = Hand()
+        self.current_bet = bet_increment
+        self.hand = Hand()
+        return
 
 player = Player()   # This player has money, a current_bet and a hand
 dealer_hand = Hand()
+dealer_delay = 2000  #   ms. 2 seconds
+dealer_timer = 0
 change_state(GameState.GS_INIT)
 
 def index_to_val(index):
@@ -219,9 +333,16 @@ def shuffle_deck():
         random.shuffle(deck)    #   shuffle that badboy
     return
 
-def betting_buttons_active(state):
+def hit_stick_buttons_active(state):
     hit_button.active = state
     stick_button.active = state
+    return
+
+def bet_buttons_active(state):
+    bet_plus_button.active = state
+    bet_minus_button.active = state
+    next_round_button.active = state
+    return
 
 def update_game():
     """
@@ -242,43 +363,93 @@ def update_game():
             clear and re-shuffle the deck (which creates a new set of 52)
             and draw 2 cards for the player and dealer
             """
-            player.reset()
+            player = Player()
+            dealer_hand = Hand()
+
+            hit_stick_buttons_active(False)
+            bet_buttons_active(False)
+
+            change_state(GameState.GS_BET)
+            cPrintClear()
+            return
+        case GameState.GS_BET:
+            bet_buttons_active(True)
+            hit_stick_buttons_active(False)
+            cPrint("Current Bet: " + str(player.current_bet))
+            return
+        case GameState.GS_PLAYER_TURN:
+            bet_buttons_active(False)
+            hit_stick_buttons_active(True)
+
+            player.hand = Hand()
             dealer_hand = Hand()
 
             shuffle_deck()
 
-            player.p_hand.add_card(deal_card())
-            player.p_hand.add_card(deal_card())
-            cPrint("Hand: " + str(player.p_hand.value))
+            player.hand.add_card(deal_card())
+            player.hand.add_card(deal_card())
             dealer_hand.add_card(deal_card())
             dealer_hand.add_card(deal_card())
-            #   check the first hands for blackjack/s
-            if(player.p_hand.value == -1):
-                if(dealer_hand.value == -1):
-                    pass    #   push, payout what was paid in
+            cPrintClear()
+            if player.hand.value == -1:
+                if dealer_hand.value == -1:
+                    cPrint("Push! Double Blackjack!")
+                    player.money += player.current_bet
+                    update_money_text()
                 else:
-                    pass    #   win by blackjack!
-            change_state(GameState.GS_PLAYER_TURN)
-            return
-        case GameState.GS_PLAYER_TURN:
-            betting_buttons_active(True)
+                    cPrint("Hand: Blackjack!")
+                    player.money += int(player.current_bet * 1.5)
+                    update_money_text*()
+            else:
+                cPrint("Hand: " + str(player.hand.value))
             return
         case GameState.GS_DEALER_TURN:
-            betting_buttons_active(False)
-            if dealer_hand.value > player.p_hand.value:
-                pass    #   dealer wins
-            elif dealer_hand.value == player.p_hand.value:
-                pass    #   push
-            elif dealer_hand.value < 17:
-                pass    #   hit
-            elif dealer_hand.value == 17 and len(dealer_hand.cards) == 2:
-                pass    #   soft 17, hit
+            global dealer_timer
+            state_updated = True    #   keep updating dealers turn here. probably a better way
+            """
+            We're creating a timer here. it will start at 2 seconds, 2000 ms.
+            it will decrease by the time since we were last here in the else clause below
+            This is to control how fast the dealer makes move, to keep it visible.
+            """
+            if(dealer_timer <= 0):
+                dealer_timer = dealer_delay
+                bet_buttons_active(False)
+                hit_stick_buttons_active(False)
+                if dealer_hand.value > player.hand.value:
+                    cPrint("Dealer wins: " + str(dealer_hand.value))
+                    player.current_bet = bet_increment
+                    update_money_text()
+                    change_state(GameState.GS_END_ROUND)
+                elif dealer_hand.value == player.hand.value:
+                    cPrint("Push: Bet returned.")
+                    player.money += player.current_bet
+                    update_money_text()
+                    change_state(GameState.GS_END_ROUND)
+                elif dealer_hand.value < 17:
+                    hit_clicked(True)   #   Dealer hits
+                elif dealer_hand.value == 17 and len(dealer_hand.cards) == 2:
+                    hit_clicked(True)
+                else:
+                    cPrint("Dealer sticks on " + str(dealer_hand.value))
+                    if player.hand.value > dealer_hand.value:
+                        cPrint("Player wins!")
+                        player.money += player.current_bet * 2
+                        update_money_text()
+                    elif player.hand.value == dealer_hand.value:
+                        cPrint("Push")
+                        player.money += player.current_bet
+                        update_money_text()
+                    else:
+                        cPrint("Dealer wins.")
+                    change_state(GameState.GS_END_ROUND)
             else:
-                pass    #   stick
-            pass
+                dealer_timer -= pygame.time.get_ticks()
         case GameState.GS_END_ROUND:
+            bet_buttons_active(False)   #   These shouldn't always need calling, but i'd rather be safe and explicit
+            hit_stick_buttons_active(False)
+            #continue_buttons_active(True)
             pass
-        case GameState.GS_GAME_OVER:
+        case GameState.GS_GAME_OVER:    #   No money left.  show some stats later
             pass
     return
 
@@ -310,7 +481,7 @@ def render_cards(): #   draw all cards, calls draw_card() for each card
     global player   #   grab those globals
     global dealer_hand
     i = 0
-    for card_p in player.p_hand.cards:  #   cycle the players hand
+    for card_p in player.hand.cards:  #   cycle the players hand
         render_card(card_p, player_card_positions[i])   #   draw each card
         i += 1
     i = 0
@@ -325,20 +496,41 @@ def render_cards(): #   draw all cards, calls draw_card() for each card
 def render():
     global screen
     screen.fill((200, 200, 200))    #   if you dont fill the screen, all the old stuff will stay there
-    render_cards()
-    if game_state == GameState.GS_PLAYER_TURN:  #   only draw these buttons on the players turn
-        hit_button.render()
-        stick_button.render()
+    if game_state == GameState.GS_PLAYER_TURN or game_state == GameState.GS_DEALER_TURN or game_state == GameState.GS_END_ROUND:
+        render_cards()
+        if game_state == GameState.GS_PLAYER_TURN:  #   only draw these buttons on the players turn
+            hit_button.render()
+            stick_button.render()
+    elif game_state == GameState.GS_BET:
+        bet_plus_button.render()
+        bet_minus_button.render()
+        next_round_button.render()
+    else:
+        pass    #   continue buttons render
     
     global text
-    screen.blit(text_texture, ((screen_width - text_texture.get_width()) / 2, (screen_height - text_texture.get_height()) / 2))
-    
+    screen.blit(text_texture, ((screen_width - text_texture.get_width()) / 5, (screen_height - text_texture.get_height()) / 2))
+    screen.blit(money_text_texture, money_text_pos)
+    screen.blit(bet_text_texture, bet_text_pos)
     pygame.display.flip()
+
+def click_check_buttons():
+    if game_state == GameState.GS_PLAYER_TURN:
+        hit_button.click_check()
+        stick_button.click_check()
+    if game_state == GameState.GS_BET:
+        bet_plus_button.click_check()
+        bet_minus_button.click_check()
+        next_round_button.click_check()
+    if game_state == GameState.GS_END_ROUND:
+        pass    #   continue button clickcheck
+
 
 def main():
     random.seed(time.time())    # use the current time for a random random
     running = True  # keeps the game running
     global game_state   # keeps track of what part of the game were in
+    game_state = GameState.GS_INIT
     while(running):
         #input
         for event in pygame.event.get():
@@ -348,11 +540,12 @@ def main():
                 if event.key == pygame.K_SPACE:
                     change_state(GameState.GS_INIT) # Pressed spacebar - K_SPACE.  Re-start the game.
             elif event.type == pygame.MOUSEBUTTONUP:    # mouse has been clicked, check if its on a button
-                hit_button.click_check()
-                stick_button.click_check()
+                click_check_buttons()
         #update
         if(state_updated):  #   if we have updated the game state
             update_game()   # Checks the game state, and updates accordingly
+            if game_state == GameState.GS_QUIT:
+                running = False
         #render
         render()    # Draw things to the screen
     
