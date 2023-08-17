@@ -17,8 +17,9 @@ os.path.dirname(__file__)   is used to find where this file (blackjack.py) is lo
 """
 
 #image loading has been spread out, to show its composition
+current_file_path = os.path.dirname(__file__)
 card_path = "blackjack\\playing_cards\\cards_scaled.png"
-loadable_card_path = os.path.join(os.path.dirname(__file__), card_path)
+loadable_card_path = os.path.join(current_file_path, card_path)
 card_spritesheet = pygame.image.load(loadable_card_path)
 
 card_back_img = pygame.image.load(os.path.join(os.path.dirname(__file__), "blackjack\\playing_cards\\card_back_scaled.png"))
@@ -44,6 +45,14 @@ class GameState(Enum):  #   A list of states the game can be in. A general view 
     GS_DEALER_TURN = 2
     GS_END_ROUND = 3
     GS_GAME_OVER = 4
+
+state_updated = False
+def change_state(new_state):
+    global game_state
+    global state_updated
+
+    game_state = new_state
+    state_updated = True
 
 class Button:
     def __init__(self, position, sprite, func):
@@ -86,9 +95,17 @@ stick_button_pos = (((screen_width / 4) * 3), (screen_height / 2) + (button_spac
 
 def hit_clicked():
     print("Hit clicked")
+    player.p_hand.add_card(deal_card())
+    if(player.p_hand.value == 0):
+        pass    #   Bust
+    elif player.p_hand.value == 21: #   21, no need to hit, move to dealers turn
+        change_state(GameState.GS_DEALER_TURN)
+    else:
+        pass    #   below 21, can still hit
 
 def stick_clicked():
     print("Stick clicked")
+    change_state(GameState.GS_DEALER_TURN)
 
 hit_button = Button(hit_button_pos, hit_button_img, hit_clicked)
 stick_button = Button(stick_button_pos, stick_button_img, stick_clicked)
@@ -114,26 +131,56 @@ dealer_card_positions = (dealer_hand_offset,
                          (dealer_hand_offset[0] + ((card_w + card_spacing) * 2), dealer_hand_offset[1]),
                          (dealer_hand_offset[0] + ((card_w + card_spacing) * 3), dealer_hand_offset[1]),
                          (dealer_hand_offset[0] + ((card_w + card_spacing) * 4), dealer_hand_offset[1]))
+
+class Hand():
+    def __init__(self) -> None:
+        self.cards = []
+        self.value = 0
+    def add_card(self, card_index):
+        self.cards.append(card_index)
+        self.value = self.check_hand()
+    def print_cards(self):
+        for card in self.cards:
+            print(card)
+    def check_hand(self):
+        hand_val = 0
+        aces = 0
+        for card in self.cards:
+            card_index = card % 13
+            if card_index == 12:    #   ace - special case
+                aces += 1           #   keep a total, and choose 1's or 11's later
+                hand_val += 1       #   we'll add the 1 now, and maybe 10 later
+            elif card_index < 9:    #   2-10  -  our sprites start at 2, so we add 2 to the index for value
+                hand_val += card_index + 2
+            else:                   #   all face cards = 10
+                hand_val += 10
+        if hand_val > 21:   #   Bust
+            return 0
+        elif hand_val < 12: #   Low enough to convert an ace up to 11
+            if aces > 0:    #   as long as we have one
+                hand_val += 10
+                if hand_val == 21:  #   bang on 21
+                    if len(this.cards) == 2:  #   only 2 cards, blackjack!!
+                        return -1
+        return hand_val
+        # return_vals   0 - bust, -1 - blackjack, N - hand_value (2 - 21)
+
 class Player():
     money = starting_money
     current_bet = 0
-    hand = []
+    p_hand = Hand()
+    def reset(self):
+        self.money = starting_money
+        self.current_bet = 0
+        self.p_hand = Hand()
 
 player = Player()   # This player has money, a current_bet and a hand
 deck = []
-dealer_hand = []
-game_state = GameState.GS_INIT
+dealer_hand = Hand()
+change_state(GameState.GS_INIT)
 
-def int_to_suit(num):
-    match num:
-        case 0:
-            return "clubs"
-        case 1:
-            return "diamonds"
-        case 2:
-            return "hearts"
-        case 3:
-            return "spades"
+def index_to_val(index):
+    card_num = index % 13   #   cycle through suits, only find val 0 - 13
 
 def shuffle_deck():
     global deck     # grab our deck
@@ -142,10 +189,12 @@ def shuffle_deck():
         random.shuffle(deck)    #   shuffle that badboy
     return
 
-def deal_card(hand):
+def deal_card():
     global deck     #   grab that deck
-    hand.append(deck.pop())     #   take one off deck and give it to hand
-    return
+    if len(deck) > 0:   #   make sure we have a card left
+        return deck.pop()   #   take one off deck and return it
+    else:
+        pass    #   handle soon
 
 def betting_buttons_active(state):
     hit_button.active = state
@@ -160,6 +209,8 @@ def update_game():
     global game_state
     global dealer_hand
     global player
+    global state_updated
+    state_updated = False   #   reset this now we are dealing with it
 
     match game_state:
         case GameState.GS_INIT:
@@ -168,23 +219,32 @@ def update_game():
             clear and re-shuffle the deck (which creates a new set of 52)
             and draw 2 cards for the player and dealer
             """
-            player.money = starting_money
-            player.hand = []
-            player.current_bet = 0
-            dealer_hand = []
+            player.reset()
+            dealer_hand = Hand()
 
             shuffle_deck()
 
-            deal_card(player.hand)
-            deal_card(player.hand)
-            deal_card(dealer_hand)
-            deal_card(dealer_hand)
-            game_state = GameState.GS_PLAYER_TURN
+            player.p_hand.add_card(deal_card())
+            player.p_hand.print_cards()
+            player.p_hand.add_card(deal_card())
+            player.p_hand.print_cards()
+            dealer_hand.add_card(deal_card())
+            player.p_hand.print_cards()
+            dealer_hand.add_card(deal_card())
+            player.p_hand.print_cards()
+            #   check the first hands for blackjack/s
+            if(player.p_hand.value == -1):
+                if(dealer_hand.value == -1):
+                    pass    #   push, payout what was paid in
+                else:
+                    pass    #   win by blackjack!
+            change_state(GameState.GS_PLAYER_TURN)
             return
-        case GameState.GS_PLAYER_TURN:  #   on the players turn we activate the buttons. I'd rather not do this every time
+        case GameState.GS_PLAYER_TURN:
             betting_buttons_active(True)
             return
         case GameState.GS_DEALER_TURN:
+            betting_buttons_active(False)
             pass
         case GameState.GS_END_ROUND:
             pass
@@ -192,7 +252,7 @@ def update_game():
             pass
     return
 
-def render_card(index, dest):
+def render_card(index, dest):   #   Draws a single card
     """
     Were going to take the index of a card (index)
     and the destination for where we draw it (dest)
@@ -216,20 +276,20 @@ def render_card(index, dest):
         #   we scale our card placer, and draw it at dest
         screen.blit(pygame.transform.scale(card_placer, (card_w, card_h)), dest, (0, 0, card_w, card_h))
 
-def render_cards():
+def render_cards(): #   draw all cards, calls draw_card() for each card
     global player   #   grab those globals
     global dealer_hand
     i = 0
-    for card_p in player.hand:  #   cycle the players hand
+    for card_p in player.p_hand.cards:  #   cycle the players hand
         render_card(card_p, player_card_positions[i])   #   draw each card
         i += 1
     i = 0
     if game_state == GameState.GS_DEALER_TURN:  #   if its the dealers turn
-        for card_d in dealer_hand:
+        for card_d in dealer_hand.cards:
             render_card(card_d, dealer_card_positions[i])   #   then show all of his cards
             i += 1
     else:                                       #   but if its not the dealers turn
-        render_card(dealer_hand[0], dealer_card_positions[0])   #   only show his first card
+        render_card(dealer_hand.cards[0], dealer_card_positions[0])   #   only show his first card
         render_card(-1, dealer_card_positions[1])
 
 def render():
@@ -253,12 +313,13 @@ def main():
                 running = False
             elif event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_SPACE:
-                    game_state = GameState.GS_INIT  # Pressed spacebar - K_SPACE.  Re-start the game.
+                    change_state(GameState.GS_INIT) # Pressed spacebar - K_SPACE.  Re-start the game.
             elif event.type == pygame.MOUSEBUTTONUP:    # mouse has been clicked, check if its on a button
                 hit_button.click_check()
                 stick_button.click_check()
         #update
-        update_game()   # Checks the game state, and updates accordingly
+        if(state_updated):  #   if we have updated the game state
+            update_game()   # Checks the game state, and updates accordingly
         #render
         render()    # Draw things to the screen
     
