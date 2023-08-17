@@ -9,6 +9,21 @@ using random for deck shuffling, time to seed random
 using os for path
 """
 pygame.init()
+font = pygame.font.SysFont('arial', 15)
+text = ""
+text_texture = font.render(text, True, (0,0,0))
+
+def cPrint(in_text):
+    global text
+    global text_texture
+    text += " " + in_text
+    text_texture = font.render(text, True, (0,0,0))
+
+def cPrintClear():
+    global text
+    global text_texture
+    text = ""
+    text_texture = font.render("", True, (0,0,0))
 
 """
 Path to card images.
@@ -80,6 +95,7 @@ class Button:
             self.callback() is set as hit_clicked when creating the hit_button.
             this allows us to call a function (hit_clicked())
             """
+            cPrintClear()
             self.callback() #callback = hit_clicked   so   callback() = hit_clicked()
 
 button_height = 32
@@ -103,23 +119,23 @@ def deal_card():
 
 def hit_clicked():
     global player
-    print("Hit clicked")
+    cPrint("Hit clicked")
     player.p_hand.add_card(deal_card())
     if(player.p_hand.value == 0):
-        print("Bust")
+        cPrint("Bust")
         change_state(GameState.GS_INIT)
     elif player.p_hand.value == 21: #   21, no need to hit, move to dealers turn
-        print("21")
+        cPrint("21")
         change_state(GameState.GS_DEALER_TURN)
     else:
-        print("Hand: " + str(player.p_hand.value))
+        cPrint("Hand: " + str(player.p_hand.value))
         if(len(player.p_hand.cards) == 5):
-            print("5 card trick!")
+            cPrint("5 card trick!")
             change_state(GameState.GS_INIT)
         pass    #   below 21, can still hit
 
 def stick_clicked():
-    print("Stick clicked")
+    cPrint("Stick clicked")
     change_state(GameState.GS_DEALER_TURN)
 
 hit_button = Button(hit_button_pos, hit_button_img, hit_clicked)
@@ -233,10 +249,9 @@ def update_game():
 
             player.p_hand.add_card(deal_card())
             player.p_hand.add_card(deal_card())
-            print("Hand: " + str(player.p_hand.value))
+            cPrint("Hand: " + str(player.p_hand.value))
             dealer_hand.add_card(deal_card())
             dealer_hand.add_card(deal_card())
-            print("Dealer Hand: " + str(dealer_hand.cards[0]))
             #   check the first hands for blackjack/s
             if(player.p_hand.value == -1):
                 if(dealer_hand.value == -1):
@@ -250,6 +265,16 @@ def update_game():
             return
         case GameState.GS_DEALER_TURN:
             betting_buttons_active(False)
+            if dealer_hand.value > player.p_hand.value:
+                pass    #   dealer wins
+            elif dealer_hand.value == player.p_hand.value:
+                pass    #   push
+            elif dealer_hand.value < 17:
+                pass    #   hit
+            elif dealer_hand.value == 17 and len(dealer_hand.cards) == 2:
+                pass    #   soft 17, hit
+            else:
+                pass    #   stick
             pass
         case GameState.GS_END_ROUND:
             pass
@@ -304,6 +329,9 @@ def render():
     if game_state == GameState.GS_PLAYER_TURN:  #   only draw these buttons on the players turn
         hit_button.render()
         stick_button.render()
+    
+    global text
+    screen.blit(text_texture, ((screen_width - text_texture.get_width()) / 2, (screen_height - text_texture.get_height()) / 2))
     
     pygame.display.flip()
 
