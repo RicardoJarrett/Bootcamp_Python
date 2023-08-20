@@ -8,6 +8,13 @@ Using pygame for window, rendering, input
 using random for deck shuffling, time to seed random
 using os for path
 """
+
+"""
+I didn't expect such a large project. I should have split this into modules.
+plan to move globals into a dedicated module.
+gather rendering, objects, helper funcs
+"""
+
 pygame.init()
 font = pygame.font.SysFont('arial', 15)
 text = ""
